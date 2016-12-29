@@ -33,10 +33,10 @@ class SIP_ServerHandler(socketserver.DatagramRequestHandler):
             self.dest_port.append(chops[11])
             print("Received: " + data)
             
-            sdp_body = 'Content-Type: application/sdp\r\n\r\n' + 'v=0\r\n' +
-                       'o=' + config_info['account']['username'] + ' ' +
-                       config_info['uaserver']['ip'] + '\r\n' + 's=practica_final\r\n'
-                       + 't=0\r\n' + 'm=audio ' + config_info['rtpaudio']['puerto'] +
+            sdp_body = 'Content-Type: application/sdp\r\n\r\n' + 'v=0\r\n' + \
+                       'o=' + config_info['account']['username'] + ' ' + \
+                       config_info['uaserver']['ip'] + '\r\n' + 's=practica_final\r\n' \
+                       + 't=0\r\n' + 'm=audio ' + config_info['rtpaudio']['puerto'] + \
                        ' RTP\r\n'
             sent_line = trying_str + ring_str + sip_str + sdp_body
             self.wfile.write(bytes(sent_line, 'utf-8') + b'\r\n')
@@ -45,7 +45,7 @@ class SIP_ServerHandler(socketserver.DatagramRequestHandler):
 
         elif METHOD == 'ACK':
             print("Received: " + data)
-            aEjecutar = 'mp32rtp -i ' + self.dest_ip[0] + ' -p ' + self.dest_port[0] +
+            aEjecutar = 'mp32rtp -i ' + self.dest_ip[0] + ' -p ' + self.dest_port[0] + \
                         ' < ' + config_info['audio']['path']
             print("Executing...", aEjecutar)
             print()
