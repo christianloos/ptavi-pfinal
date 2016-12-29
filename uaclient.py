@@ -5,7 +5,7 @@
 import socket
 import sys
 import os
-import haslib
+import hashlib
 from xml.sax import make_parser
 from xml.sax import ContentHandler
 
@@ -75,7 +75,7 @@ if __name__ == "__main__":
             # Envío de datos
             
             expires_str = 'Expires: ' + str(OPTION) + '\r\n\r\n'
-            line = METHOD + " sip:" + config_info['account']['username'] +
+            line = METHOD + " sip:" + config_info['account']['username'] + \
                    ':' + config_info['uaserver']['puerto'] + sip_str
             sent_line = line + expires_str
             my_socket.send(bytes(sent_line, 'utf-8') + b'\r\n')
@@ -88,7 +88,7 @@ if __name__ == "__main__":
             if data.decode('utf-8').split()[1] == '401':
                 print('Recibido --', data.decode('utf-8'))
                 
-                nonce = data.decode('utf-8')split()[6].split('"')[1]
+                nonce = data.decode('utf-8').split()[6].split('"')[1]
                 response = hashlib.sha1()
                 response.update(bytes(config_info['account']['passwd'], 'utf-8'))
                 response.update(bytes(nonce, 'utf-8'))
@@ -111,9 +111,9 @@ if __name__ == "__main__":
         elif METHOD == 'INVITE':
             # Envío de datos
             header = 'Content-Type: application/sdp\r\n\r\n'
-            body = 'v=0\r\n' + 'o=' + config_info['account']['username'] +
-                   ' ' + config_info['uaserver']['ip'] + '\r\n' +
-                   's=practica_final\r\n' + 't=0\r\n' + 'm=audio ' +
+            body = 'v=0\r\n' + 'o=' + config_info['account']['username'] + \
+                   ' ' + config_info['uaserver']['ip'] + '\r\n' + \
+                   's=practica_final\r\n' + 't=0\r\n' + 'm=audio ' + \
                    config_info['rtpaudio']['puerto'] + ' RTP\r\n'
             line = METHOD + " sip:" + OPTION + sip_str
             sent_line = line + header + body
@@ -135,11 +135,11 @@ if __name__ == "__main__":
                 print(ack_line)
                 
             # Se extrae el puerto y la IP para el envío RTP
-            rtp_ip = data.decode('utf-8').split()[13]
             rtp_port = data.decode('utf-8').split()[17]
+            rtp_ip = data.decode('utf-8').split()[13]            
             
             # Envío RTP
-            aEjecutar = 'mp32rtp -i ' + config_info['regproxy']['ip'] +
+            aEjecutar = 'mp32rtp -i ' + config_info['regproxy']['ip'] + \
                         ' -p ' + rtp_port + ' < ' + config_info['audio']['path']
             print("Ejecutando...", aEjecutar)
             os.system(aEjecutar)
