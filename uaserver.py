@@ -1,91 +1,114 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-""" UA Server para sesión SIP """
+""" UA Server para una sesión SIP """
 
-import socketserver
 import sys
 import os
+import socketserver
 from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 from uaclient import XmlHandler
 
+
 """ Clase manejadora de SIP y RTP en el servidor """
 
 class SIP_ServerHandler(socketserver.DatagramRequestHandler):
+
     dest_ip = []
     dest_port = []
 
     def handle(self):
-
-        # Leyendo línea a línea lo que nos envía el cliente
+        
+        # Leyendo línea a línea lo que envía el cliente
         line = self.rfile.read()
         data = line.decode('utf-8')
-        chops = data.split(' ')
-        METHOD = chops[0]
-
+        
+        chops = data.split()
+        REQUEST = chops[0]
+        
         sip_str = ' SIP/2.0\r\n' #OJO CON EL ESPACIO SI HAY ERRORES
         trying_str = 'SIP/2.0 100 Trying\r\n\r\n'
-        ring_str = 'SIP/2.0 180 Ringing\r\n\r\n'
-        
-        # Detección de método SIP
-        if METHOD == 'INVITE':
+        ring_str = 'SIP/2.0 180 Ring\r\n\r\n'
+        ok_str = 'SIP/2.0 200 OK\r\n'
+
+        # Detección del método SIP
+        # Petición INVITE
+        if REQUEST == 'INVITE':
+
             self.dest_ip.append(chops[7])
             self.dest_port.append(chops[11])
             print("Received: " + data)
             
-            sdp_body = 'Content-Type: application/sdp\r\n\r\n' + 'v=0\r\n' + \
-                       'o=' + config_info['account']['username'] + ' ' + \
-                       config_info['uaserver']['ip'] + '\r\n' + 's=practica_final\r\n' \
-                       + 't=0\r\n' + 'm=audio ' + config_info['rtpaudio']['puerto'] + \
-                       ' RTP\r\n'
-            sent_line = trying_str + ring_str + sip_str + sdp_body
+            # Respuesta al cliente
+            header = 'Content-Type: application/sdp\r\n\r\n'
+            v = 'v=0\r\n'
+            o = 'o=' + user_address + ' ' + server_ip + '\r\n'
+            s = 's=RobarPlanos\r\n'
+            t = 't=0\r\n'
+            m = 'm=audio ' + str(rtp_port) + ' RTP\r\n'
+            body = v + o + s + t + m
+            sent_line = trying_str + ring_str + ok_str + header + body
             self.wfile.write(bytes(sent_line, 'utf-8') + b'\r\n')
-            print("Enviando...")
-            print(sent_line)
+            print("Sending..." + '\r\n' + sent_line)
 
-        elif METHOD == 'ACK':
+        # Petición ACK/ Envío RTP
+        elif REQUEST == 'ACK':
+
+           # Envío RTP
             print("Received: " + data)
-            aEjecutar = 'mp32rtp -i ' + self.dest_ip[0] + ' -p ' + self.dest_port[0] + \
-                        ' < ' + config_info['audio']['path']
-            print("Executing...", aEjecutar)
-            print()
+            aEjecutar = 'mp32rtp -i ' + server_ip + ' -p ' + \
+            str(rtp_port) + ' < ' + str(audio)
+            print("Executing... ", aEjecutar)
             os.system(aEjecutar)
-            self.dest_ip = []
-            self.dest_port = []
-            print("Enviado con éxito")
-            
+            print("Successfully sent")
 
-        elif METHOD == 'BYE':
+        elif REQUEST == 'BYE':
+
             print("Received: " + data)
-            self.wfile.write(b"SIP/2.0 200 OK\r\n\r\n")
+            self.wfile.write(bytes(ok_str, 'utf-8') + b'\r\n')
+            print("Sending..." + '\r\n' + ok_str)
 
-        elif METHOD not in ['INVITE', 'ACK', 'BYE']:
+        elif REQUEST not in ['INVITE', 'ACK', 'BYE']:
             self.wfile.write(b"SIP/2.0 405 Method Not Allowed\r\n\r\n")
+
         else:
             self.wfile.write(b"SIP/2.0 400 Bad Request\r\n\r\n")
+            
+        
 
 
 if __name__ == "__main__":
-    # Creamos servidor de eco y escuchamos
+
+    # Archivo de configuración XML y método pasados por comandos.
     try:
-        CONFIG = sys.argv[1]
+        XML = str(sys.argv[1])
     except:
         sys.exit("Usage: python3 uaserver.py config")
         
-    # Instanciación del manejador del programa cliente
+    # Instanciación del manejador del archivo de configuración
     parser = make_parser()
     cHandler = XmlHandler()
     parser.setContentHandler(cHandler)
-    parser.parse(open(CONFIG))
-    
+    parser.parse(open(XML))
     config_info = cHandler.get_tags()
 
-    serv = socketserver.UDPServer(('', int(config_info['uaserver']['puerto'])),
-                                  SIP_ServerHandler)
-    print("Listening...")
+    print()
 
+    # Declaración de variables usadas al extraer los datos del XML
+    user_address = config_info[0]['account']['username']
+    server_ip = config_info[1]['uaserver']['ip']
+    server_port = int(config_info[1]['uaserver']['puerto'])
+    rtp_port = int(config_info[2]['rtpaudio']['puerto'])
+    audio = config_info[5]['audio']['path']
+
+    # Creación del socket con la IP y puerto al que conectarse
+    serv = socketserver.UDPServer((server_ip,
+                                   server_port),
+                                   SIP_ServerHandler)
+    print("Listening..." + '\r\n')
+    
     try:
         serv.serve_forever()
     except KeyboardInterrupt:
         print()
-        print("Finalizado servidor")
+        print("Server offline")
