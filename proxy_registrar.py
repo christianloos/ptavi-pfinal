@@ -15,170 +15,185 @@ import hashlib
 class Proxy_XmlHandler(ContentHandler):
 
     def __init__(self):
-        self.tags = {}
 
-    # Definición de la lista de atributos
-    def startElement(self, name, attrs):
-        data_xml = {}
-        att_1 = ['name', 'ip', 'puerto']
-        att_2 = ['path', 'passwdpath']
-        att_3 = ['path']
-        tag_list = {'server': att_1, 'database': att_2,
-                    'log': att_3}
+        # Definición de la lista de atributos
+        self.data_xml = []
+        self.tag_dicc = {"server": ['name', 'ip', 'puerto'],
+                         "database": ['path', 'passwdpath'],
+                         "log": ['path']}
 
-        if tag in tag_list:
-            for atribute in tag_list[tag]:
-                if tag == 'server' and atribute == 'ip':
-                    if attrs.get(atribute, "127.0.0.1") != "":
-                        data_xml[atribute] = attrs.get(atribute, "127.0.0.1")
-                    elif attrs.get(atribute, "") != "":
-                        data_xml[atribute] = attrs.get(atribute, "")
-                    self.tag_list[tag] = data_xml
+    def startElement(self, tag, atts):
+
+        if tag in self.tag_dicc:
+            tag_dicc = {}
+            for att in self.tag_dicc[tag]:
+                tag_dicc[att] = atts.get(att, "")
+            element = {tag: tag_dicc}
+            self.data_xml.append(element)
 
     def get_tags(self):
-        return self.tag_list
+        return self.data_xml
 
-""" Clase manejadora del servidor SIP """
+""" Clase manejadora del registrar """
 class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
-    user_list = []
-    nonce = '898989898798989898989'
+    unauto_str = 'SIP/2.0 401 Unauthorized' + '\r\n' + \
+                     'WW Authenticate: Digest nonce= '
+    
+    nonce = '898989898798989898989\r\n\r\n'
+    trying_str = 'SIP/2.0 100 Trying\r\n\r\n'
+    ring_str = 'SIP/2.0 180 Ring\r\n\r\n'
+    ok_str = 'SIP/2.0 200 OK\r\n'
+    bad_str = 'SIP/2.0 400 Bad Request\r\n\r\n'
+    client_list = []
+    hora = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time()))
     resend_address = []
     resend_port = []
-    
+
     # Manejador que administra las peticiones Register
     def handle(self):
+
         self.json2registered()
-        self.expiration()
+        
+        # Leyendo línea a línea lo que manda el cliente
         line = self.rfile.read()
         data = line.decode('utf-8')
-        chops = data.split()
-        method = chops[0]
-        print('Received:')
-        print(line.decode('utf-8'))
         
-        if method == 'REGISTER' and len(chops) >= 6:
-            auto = chops[5]
-            fich = open(config_info['database']['passwdpath'], 'r')
-            
-            for linea in fich.readlines():
-                if chops[1][4:-5] == linea.split()[0][:-5]:
-                    passwd = linea.split()[0][-4:]
-                    
-                    authenticate = hashlib.sha1()
-                    authenticate.update(bytes(passwd, 'utf-8'))
-                    authenticate.update(bytes(self.nonce,'utf-8'))
-                    authenticate = authenticate.hexdigest()
-                    
-                    if authenticate == chops[7][10:-1]:
-                        self.wfile.write(b"SIP/2.0 200 OK\r\n\r\n")
-                        expires = int(chops[4].split('/')[0])
-                        gm = time.strftime('%Y-%m-%d %H:%M:%S',
-                                           time.gmtime(time.time()+expires))
-                        client = [chops[1][4:-5],
-                                  {"address": self.client_address[0],
-                                   "port": chops[1][-4],
-                                   "expires": gm}]
-                        
-                        if chops[4].split('/')[0] == '0':
-                            for user in self.user_list:
-                                if user[0] == chops[1][4:-5]:
-                                    self.user_list.remove(user)
-                        elif chops[0] == 'REGISTER':
-                            self.user_list.append(client)
-                            if chops [3][:-1] == 'Expires':
-                                if chops[4].split('/')[0] == '0':
-                                    self.data_list.remove(client)
-                            print('Client successfully registered')
+        print("Received from the client: " + '\r\n' + data)
+        
+        chops = data.split()
+        REQUEST = chops[0]
 
-                        self.register2json()
-                    else:
-                        print('Incorrect password for user: ' + chops[1][4:-5])
-                        self.wfile.write(b"SIP/2.0 400 Bad Request\r\n\r\n")
+        # Petición REGISTER
+        if REQUEST == 'REGISTER':
 
-        elif method == 'REGISTER' and len(chops) < 6:
-            self.wfile.write(bytes('SIP/2.0 401 Unauthorized\r\n' +
-                                   'WW Authenticate: Digest nonce="' + self.nonce +
-                                   '"\r\n\r\n'))
-            print('Client not successfully registered, authentication required')
-            print()
+            exp_time = int(chops[4])
             
-        elif method == 'INVITE':
-            dest = chops[1][4:]
+            client = [chops[1][4:-5],
+                      {"address": self.client_address[0],
+                       "port": chops[1][-4:],
+                       "exp_time": str(self.hora) + ' + ' + str(exp_time)}]
+
+            
+            if exp_time == 0:
+                for cli in self.client_list:
+                    if cli[0] == chops[1][4:-5]:
+                        self.client_list.remove(cli)
+
+            if exp_time > 0:
+                for cli in self.client_list:
+                    if cli[0] == chops[1][4:-5]:
+                        self.client_list.remove(cli)
+                self.client_list.append(client)
+                print('Client successfully registered\r\n')
+
+            self.register2json()
+
+        # Petición INVITE
+        elif REQUEST == 'INVITE':
+
+            destination = chops[1][4:]
+            print(chops[1][4:])
             resend = False
-            for client in self.user_list:
-                if client[0] == dest:
+
+            for cli in self.client_list:
+                if cli[0] == destination:
                     resend = True
-                    with socket.socket(socket.AF_INET, 
+                    with socket.socket(socket.AF_INET,
                                        socket.SOCK_DGRAM) as my_socket:
-                        my_socket.connect((client[1]["address"], 
-                                           int(client[1]["port"])))
-                        self.resend_address.append(client[1]["address"])
-                        self.resend_port.append(int(client[1]["port"]))
-                        my_socket.send(bytes(lines.decode('utf-8'),'utf-8' + b'\r\n'))
-                        print("Reenviando: (" + client[1]["address"] + "," +
-                              client[1]["port"] + ")")
-                        print(data)
+                        my_socket.connect((cli[1]["address"],
+                                           int(cli[1]["port"])))
+                        self.resend_address.append(cli[1]["address"])
+                        self.resend_port.append(int(cli[1]["port"]))
+                        my_socket.send(bytes(data, 'utf-8'))
+                        print()
+                        print("Resending: (" + cli[1]["address"] + "," + \
+                              cli[1]["port"] + ")\r\n" + data)
+
+                        response = my_socket.recv(1024).decode('utf-8')
+                        print('Received from the server', response)
                         
-                        reply = my_socket.recv(1024).decode('utf-8')
-                        print('Recibido --', reply)
-                        
-                        self.wfile.write(bytes(reply, 'utf-8'))
-                        
+                        self.wfile.write(bytes(response, 'utf-8'))
+
             if not resend:
                 self.wfile.write(b"SIP/2.0 404 User Not Found\r\n\r\n")
-                
-        elif method == 'ACK':
-            ack_chops = data.split()
-            print("Reenviando: (" + self.resend_adress[0] + str(self.resend_port[0]) +
-                  ")")
-            print(data)
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as my_socket:
-                my_socket.connect((self.resend_address[0], self.resend_port[0]))
-                my_socket.send(bytes(lines.decode('utf-8'), 'utf-8'))
-                self.resend_address = []
-                self.resend_port = []
-                
-        def register2json(self):
-            json.dump(self.user_list, open('registered.json', 'w'), indent='\t')
-            
-        def json2registered(self):
-            try:
-                with open('registered.json') as client_list:
-                    self.user_list = json.load(client_list)
-            except:
-                self.register2json()
-                
-        def expiration(self):
-            for user in self.user_list:
-                if user[1]["expires"] <= time.strftime('%Y-%m-%d %H:%M:%S',
-                                                       time.gmtime(time.time())):
-                    self.user_list.remove(user)
-                    json.dump(self.user_list, open('registered.json', 'w'), indent='\t')
 
+        # Petición ACK
+        elif REQUEST == 'ACK':
+        
+            with socket.socket(socket.AF_INET,
+                               socket.SOCK_DGRAM) as my_socket:
+                my_socket.connect((self.resend_address[0], 
+                                   self.resend_port[0]))
+                my_socket.send(bytes(data, 'utf-8'))
+                print("Resending: (" + self.resend_address[0] + "," + \
+                      str(self.resend_port[0]) + ")\r\n" + data)
+
+
+        elif REQUEST == 'BYE':
+        
+            with socket.socket(socket.AF_INET,
+                               socket.SOCK_DGRAM) as my_socket:
+                my_socket.connect((self.resend_address[0], 
+                                   self.resend_port[0]))
+                my_socket.send(bytes(data, 'utf-8'))
+                print("Resending: (" + self.resend_address[0] + "," + \
+                      str(self.resend_port[0]) + ")\r\n" + data)
+
+                response = my_socket.recv(1024).decode('utf-8')
+                print('Received from the server:', response)
+                
+                self.wfile.write(bytes(response, 'utf-8'))
+                
+
+
+    def register2json(self):
+
+        json_file = open('registered.json', 'w')
+        json.dump(self.client_list, json_file, indent='\t')
+
+    def json2registered(self):
+
+        try:
+            with open('registered.json') as client_file:
+                self.client_list = json.load(client_file)
+        except:
+            self.register2json()
 
 if __name__ == "__main__":
 
+    # Archivo de configuración XML y método pasados por comandos.
     try:
-        CONFIG = sys.argv[1]
+        XML = str(sys.argv[1])
     except:
         sys.exit("Usage: python3 proxy_registrar.py config")
 
+    # Instanciación del manejador del archivo de configuración
     parser = make_parser()
     cHandler = Proxy_XmlHandler()
     parser.setContentHandler(cHandler)
-    parser.parse(open(CONFIG))
-    
+    parser.parse(open(XML))
     config_info = cHandler.get_tags()
-    
-    serv = socketserver.UDPServer(('', int(config_info['server']['puerto'])),
-                                  SIPRegisterHandler)
-    print("Server Sheldon_Proxy listening at port " +
-          config_info['server']['puerto'] + " ..." + b'\r\n')
+
+    print()
+
+
+    # Declaración de variables usadas al extraer los datos del XML
+    proxy_name = config_info[0]['server']['name']
+    proxy_ip = config_info[0]['server']['ip']
+    proxy_port = config_info[0]['server']['puerto']
+    user_file = config_info[1]['database']['path']
+    passwd_file = config_info[1]['database']['passwdpath']
+
+    # Creación del servidor
+    serv = socketserver.UDPServer((proxy_ip,
+                                   int(proxy_port)),
+                                   SIPRegisterHandler)
+    print("Server " + proxy_name + " listening at port " + proxy_port +
+          "..." + '\r\n')
 
     try:
         serv.serve_forever()
     except KeyboardInterrupt:
-        json = open('registered.json', 'w')
-        json.close()
-        print("Finalizado servidor")
+        print()
+        print("Server offline")
