@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """ UA Client para una sesión SIP """
 
-import socket
 import sys
 import os
+import socket
 import hashlib
 from xml.sax import make_parser
 from xml.sax import ContentHandler
@@ -13,141 +13,142 @@ from xml.sax import ContentHandler
 class XmlHandler(ContentHandler):
 
     def __init__(self):
-        self.tags = {}
 
-    # Definición de la lista de atributos
-    def startElement(self, name, attrs):
-        data_xml = {}
-        att_1 = ['username', 'passwd']
-        att_2 = ['ip', 'puerto']
-        att_3 = ['puerto']
-        att_4 = ['ip', 'puerto']
-        att_5 = ['path']
-        att_6 = ['path']
-        tag_list = {'account': att_1, 'uaserver': att_2,
-                    'rtpaudio': att_3, 'regproxy': att_4,
-                    'log': att_5, 'audio': att_6}
+        # Definición de la lista de atributos
+        self.data_xml = []
+        self.tag_dicc = {"account": ['username', 'passwd'],
+                         "uaserver": ['ip', 'puerto'], 
+                         "rtpaudio": ['puerto'], 
+                         "regproxy": ['ip', 'puerto'],
+                         "log": ['path'],
+                         "audio": ['path']}
 
-        if tag in tag_list:
-            for atribute in tag_list[tag]:
-                if tag == 'uaserver' and atribute == 'ip':
-                    if attrs.get(atribute, "127.0.0.1") != "":
-                        data_xml[atribute] = attrs.get(atribute, "127.0.0.1")
-                    elif attrs.get(atribute, "") != "":
-                        data_xml[atribute] = attrs.get(atribute, "")
-                    self.tag_list[tag] = data_xml
+    def startElement(self, tag, atts):
+
+        if tag in self.tag_dicc:
+            tag_dicc = {}
+            for att in self.tag_dicc[tag]:
+                tag_dicc[att] = atts.get(att, "")
+            element = {tag: tag_dicc}
+            self.data_xml.append(element)        
 
     def get_tags(self):
-        return self.tag_list
+        return self.data_xml
+
 
 if __name__ == "__main__":
 
-    # Instanciación del manejador
+    # Archivo de configuración XML y método pasados por comandos.
+    try:
+        XML = str(sys.argv[1])
+        REQUEST = str(sys.argv[2])
+        if REQUEST == 'REGISTER':
+            EXPTIME = int(sys.argv[3])
+        elif REQUEST in ['INVITE', 'BYE']:
+            USER = sys.argv[3]
+    except:
+        sys.exit("Usage: python3 uaclient.py config method option")
+    
+    # Instanciación del manejador del archivo de configuración
     parser = make_parser()
     cHandler = XmlHandler()
     parser.setContentHandler(cHandler)
-    
-
-    # Dirección IP y puerto del servidor pasada por comandos.
-    try:
-        CONFIG = str(sys.argv[1])
-        METHOD = str(sys.argv[2])
-        if METHOD == 'REGISTER':
-            OPTION = int(sys.argv[3])
-        elif METHOD in ['INVITE', 'BYE']:
-            OPTION = sys.argv[3]
-    except:
-        sys.exit("Usage: python3 uaclient.py config method option")
-
-    parser.parse(open(CONFIG))
+    parser.parse(open(XML))
     config_info = cHandler.get_tags()
 
 
+    # Declaración de variables usadas al extraer los datos del XML
+    user_address = config_info[0]['account']['username']
+    user_passwd = config_info[0]['account']['passwd']
+    server_ip = config_info[1]['uaserver']['ip']
+    server_port = int(config_info[1]['uaserver']['puerto'])
+    rtp_port = int(config_info[2]['rtpaudio']['puerto'])
+    proxy_ip = config_info[3]['regproxy']['ip']
+    proxy_port = int(config_info[3]['regproxy']['puerto'])
+    log = config_info[4]['log']['path']
+    audio = config_info[5]['audio']['path']
+
     # Creamos el socket, lo configuramos y lo atamos a un servidor/puerto
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as my_socket:
-        my_socket.connect((config_info['regproxy']['ip'],
-                           int(config_info['regproxy']['puerto'])))
+        my_socket.connect((proxy_ip, proxy_port))
 
         sip_str = ' SIP/2.0\r\n'
-        
+
         # Petición REGISTER
-        if METHOD == 'REGISTER':
+        if REQUEST == 'REGISTER':
+        
             # Envío de datos
-            
-            expires_str = 'Expires: ' + str(OPTION) + '\r\n\r\n'
-            line = METHOD + " sip:" + config_info['account']['username'] + \
-                   ':' + config_info['uaserver']['puerto'] + sip_str
-            sent_line = line + expires_str
+            expires_str = 'Expires: ' + str(EXPTIME) + '\r\n'
+            line = REQUEST + " sip:" + user_address + ':' + str(server_port) +\
+                   sip_str
+            sent_line = line + expires_str + '\r\n'
             my_socket.send(bytes(sent_line, 'utf-8') + b'\r\n')
-            print("Enviando...")
-            print(sent_line)
+            print("Sending... " + '\r\n' + sent_line)
             
             # Recepción de datos
             data = my_socket.recv(1024)
+            response = data.decode('utf-8')
+            chops = response.split()
             
-            if data.decode('utf-8').split()[1] == '401':
-                print('Recibido --', data.decode('utf-8'))
-                
-                nonce = data.decode('utf-8').split()[6].split('"')[1]
-                response = hashlib.sha1()
-                response.update(bytes(config_info['account']['passwd'], 'utf-8'))
-                response.update(bytes(nonce, 'utf-8'))
-                response = response.hexdigest()
-                
-                # Mensaje de autorización
-                auto = 'Authorization: Digest response="' + response + '\r\n\r\n'
-                hash_line = line + 'Expires: ' + str(OPTION) + '\r\n' + auto
-                my_socket.send(bytes(hash_line, 'utf-8') + b'\r\n')
-                print("Enviando...")
-                print(hash_line)
-                
-                data = my_socket.recv(1024)
-                print('Recibido --', data.decode('utf-8'))
-            else:
-                print("Mensaje no reconocido")
-
+            if chops[1] == '401':
+                print('Received from server:', data.decode('utf-8'))
 
         # Petición INVITE
-        elif METHOD == 'INVITE':
-            # Envío de datos
+        if REQUEST == 'INVITE':
+        
+            # Envío de datos/ Descripción de sesión
             header = 'Content-Type: application/sdp\r\n\r\n'
-            body = 'v=0\r\n' + 'o=' + config_info['account']['username'] + \
-                   ' ' + config_info['uaserver']['ip'] + '\r\n' + \
-                   's=practica_final\r\n' + 't=0\r\n' + 'm=audio ' + \
-                   config_info['rtpaudio']['puerto'] + ' RTP\r\n'
-            line = METHOD + " sip:" + OPTION + sip_str
+
+            v = 'v=0\r\n'
+            o = 'o=' + user_address + ' ' + server_ip + '\r\n'
+            s = 's=RobarPlanos\r\n'
+            t = 't=0\r\n'
+            m = 'm=audio ' + str(rtp_port) + ' RTP\r\n'
+            body = v + o + s + t + m
+            line = REQUEST + " sip:" + USER + sip_str
             sent_line = line + header + body
             
             my_socket.send(bytes(sent_line, 'utf-8') + b'\r\n')
-            print("Enviando...")
-            print(sent_line)
-            
+            print("Sending..." + '\r\n' + sent_line)
+
             # Recepción de datos
             data = my_socket.recv(1024)
-            
-            if data.decode('utf-8').split()[1] == '404':
-                print('Recibido --', data.decode('utf-8'))
-            elif data.decode('utf-8').split()[7] == '200':
-                print('Recibido --', data.decode('utf-8'))
-                ack_line = 'ACK sip:' + config_info['account']['username'] + sip_str
-                my_socket.send(bytes(ack_line, 'utf-8') + b'\r\n')
-                print("Enviando...")
-                print(ack_line)
+            response = data.decode('utf-8')
+            chops = response.split()
+
+            if chops[1] == '404':
+                print('Received from server:', data.decode('utf-8'))
+            elif chops[7] == '200':
+                print('Received from server:', data.decode('utf-8'))
                 
-            # Se extrae el puerto y la IP para el envío RTP
-            rtp_port = data.decode('utf-8').split()[17]
-            rtp_ip = data.decode('utf-8').split()[13]            
+                # Envío del ACK
+                ack_line = 'ACK sip:' + user_address + sip_str
+
+                my_socket.send(bytes(ack_line, 'utf-8') + b'\r\n')
+                print("Sending..." + '\r\n' + ack_line)
+                
+                # Envío RTP
+                aEjecutar = 'mp32rtp -i ' + server_ip + ' -p ' + \
+                str(rtp_port) + ' < ' + str(audio)
+                print("Executing... ", aEjecutar)
+                os.system(aEjecutar)
+                print("Successfully sent")
+
+        # Petición BYE
+        elif REQUEST == 'BYE':
+
+            bye_line = 'BYE sip:' + user_address + sip_str
             
-            # Envío RTP
-            aEjecutar = 'mp32rtp -i ' + config_info['regproxy']['ip'] + \
-                        ' -p ' + rtp_port + ' < ' + config_info['audio']['path']
-            print("Ejecutando...", aEjecutar)
-            os.system(aEjecutar)
-            print("Enviado con éxito")
-
-        elif METHOD == 'BYE':
-
-            print("Terminando socket...")
-            # Cerramos todo
-            my_socket.close()
-            print("Socket terminado")
+            my_socket.send(bytes(bye_line, 'utf-8') + b'\r\n')
+            print("Sending..." + '\r\n' + bye_line)
+            data = my_socket.recv(1024)
+            response = data.decode('utf-8')
+            chops = response.split()
+            
+            # Finalización del socket al recibir el OK por parte del server
+            if chops[1] == '200':
+                print('Received from server:', data.decode('utf-8'))
+                print("Finishing socket...")
+                # Cerramos todo
+                my_socket.close()
+                print("Socket ended")
