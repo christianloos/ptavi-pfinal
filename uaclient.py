@@ -8,6 +8,7 @@ import socket
 import hashlib
 from xml.sax import make_parser
 from xml.sax import ContentHandler
+import time
 
 """ Clase manejadora del XML de configuración"""
 class XmlHandler(ContentHandler):
@@ -34,6 +35,14 @@ class XmlHandler(ContentHandler):
 
     def get_tags(self):
         return self.data_xml
+
+# Función de registro de operaciones en un log
+def log_reg(config_info, info):
+
+    with open(log, 'a') as log_file:
+        hora = time.strftime('%Y%m%d%H%M%S', time.gmtime(time.time()))
+        info = hora + ' ' + info + '\r\n'
+        log_file.write(info)
 
 
 if __name__ == "__main__":
@@ -85,14 +94,25 @@ if __name__ == "__main__":
             my_socket.send(bytes(sent_line, 'utf-8') + b'\r\n')
             print("Sending... " + '\r\n' + sent_line)
             
+            # Apertura del log
+            log_info = 'Sent to ' + proxy_ip + ':' + str(proxy_port) + \
+                       ': ' + sent_line.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
+            
             # Recepción de datos
             data = my_socket.recv(1024)
             answer = data.decode('utf-8')
             chops = answer.split()
             
+
             # Proceso de autenticación del cliente
             if chops[1] == '401':
                 print('Received from server:', data.decode('utf-8'))
+                
+                log_info = 'Received from ' + proxy_ip + ':' + \
+                            str(proxy_port) + ': ' + \
+                            answer.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
                 
                 nonce = answer.split('"')[1]
                 response = hashlib.sha1()
@@ -106,9 +126,18 @@ if __name__ == "__main__":
                 my_socket.send(bytes(autho_line, 'utf-8') + b'\r\n')
                 print("Sending... " + '\r\n' + autho_line)
                 
+                log_info = 'Sent to ' + proxy_ip + ':' + str(proxy_port) + \
+                       ': ' + autho_line.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
+                
                 data = my_socket.recv(1024)
                 print()
                 print('Received from server:', data.decode('utf-8'))
+                
+                log_info = 'Received from ' + proxy_ip + ':' + \
+                            str(proxy_port) + ': ' + \
+                            autho_line.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
 
         # Petición INVITE
         if REQUEST == 'INVITE':
@@ -127,11 +156,20 @@ if __name__ == "__main__":
             
             my_socket.send(bytes(sent_line, 'utf-8') + b'\r\n')
             print("Sending..." + '\r\n' + sent_line)
+            
+            log_info = 'Sent to ' + proxy_ip + ':' + str(proxy_port) + \
+                       ': ' + sent_line.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
 
             # Recepción de datos
             data = my_socket.recv(1024)
             answer = data.decode('utf-8')
             chops = answer.split()
+            
+            log_info = 'Received from ' + proxy_ip + ':' + \
+                        str(proxy_port) + ': ' + \
+                        answer.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
 
             if chops[1] == '404':
                 print('Received from server:', data.decode('utf-8'))
@@ -144,12 +182,20 @@ if __name__ == "__main__":
                 my_socket.send(bytes(ack_line, 'utf-8') + b'\r\n')
                 print("Sending..." + '\r\n' + ack_line)
                 
+                log_info = 'Sent to ' + proxy_ip + ':' + str(proxy_port) + \
+                           ': ' + sent_line.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
+                
                 # Envío RTP
                 aEjecutar = 'mp32rtp -i ' + server_ip + ' -p ' + \
                 str(rtp_port) + ' < ' + str(audio)
                 print("Executing... ", aEjecutar)
                 os.system(aEjecutar)
                 print("Successfully sent")
+                
+                log_info = 'Sent to ' + server_ip + ':' + str(rtp_port) + \
+                           ': ' + 'RTP MEDIA'
+                log_reg(config_info, log_info)
 
         # Petición BYE
         elif REQUEST == 'BYE':
@@ -158,13 +204,25 @@ if __name__ == "__main__":
             
             my_socket.send(bytes(bye_line, 'utf-8') + b'\r\n')
             print("Sending..." + '\r\n' + bye_line)
+            
+            log_info = 'Sent to ' + proxy_ip + ':' + str(proxy_port) + \
+                       ': ' + bye_line.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
+            
             data = my_socket.recv(1024)
             answer = data.decode('utf-8')
             chops = answer.split()
             
+            
             # Finalización del socket al recibir el OK por parte del server
             if chops[1] == '200':
                 print('Received from server:', data.decode('utf-8'))
+                
+                log_info = 'Received from ' + proxy_ip + ':' + \
+                            str(proxy_port) + ': ' + \
+                            answer.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
+                
                 print("Finishing socket...")
                 # Cerramos todo
                 my_socket.close()
