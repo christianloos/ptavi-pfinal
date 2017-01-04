@@ -78,7 +78,7 @@ if __name__ == "__main__":
         if REQUEST == 'REGISTER':
         
             # Envío de datos
-            expires_str = 'Expires: ' + str(EXPTIME) + '\r\n'
+            expires_str = 'Expires: ' + str(EXPTIME)
             line = REQUEST + " sip:" + user_address + ':' + str(server_port) +\
                    sip_str
             sent_line = line + expires_str + '\r\n'
@@ -87,10 +87,27 @@ if __name__ == "__main__":
             
             # Recepción de datos
             data = my_socket.recv(1024)
-            response = data.decode('utf-8')
-            chops = response.split()
+            answer = data.decode('utf-8')
+            chops = answer.split()
             
+            # Proceso de autenticación del cliente
             if chops[1] == '401':
+                print('Received from server:', data.decode('utf-8'))
+                
+                nonce = answer.split('"')[1]
+                response = hashlib.sha1()
+                response.update(bytes(user_passwd, 'utf-8'))
+                response.update(bytes(nonce, 'utf-8'))
+                response = response.hexdigest()
+
+                authorization = 'Authorization: Digest response="' + \
+                                response + '"'
+                autho_line = sent_line + authorization
+                my_socket.send(bytes(autho_line, 'utf-8') + b'\r\n')
+                print("Sending... " + '\r\n' + autho_line)
+                
+                data = my_socket.recv(1024)
+                print()
                 print('Received from server:', data.decode('utf-8'))
 
         # Petición INVITE
@@ -113,8 +130,8 @@ if __name__ == "__main__":
 
             # Recepción de datos
             data = my_socket.recv(1024)
-            response = data.decode('utf-8')
-            chops = response.split()
+            answer = data.decode('utf-8')
+            chops = answer.split()
 
             if chops[1] == '404':
                 print('Received from server:', data.decode('utf-8'))
@@ -142,8 +159,8 @@ if __name__ == "__main__":
             my_socket.send(bytes(bye_line, 'utf-8') + b'\r\n')
             print("Sending..." + '\r\n' + bye_line)
             data = my_socket.recv(1024)
-            response = data.decode('utf-8')
-            chops = response.split()
+            answer = data.decode('utf-8')
+            chops = answer.split()
             
             # Finalización del socket al recibir el OK por parte del server
             if chops[1] == '200':
