@@ -26,7 +26,7 @@ class SIP_ServerHandler(socketserver.DatagramRequestHandler):
         chops = data.split()
         REQUEST = chops[0]
         
-        sip_str = ' SIP/2.0\r\n' #OJO CON EL ESPACIO SI HAY ERRORES
+        sip_str = ' SIP/2.0\r\n' #OJO CON LOS SALTOS DE LINEA
         trying_str = 'SIP/2.0 100 Trying\r\n\r\n'
         ring_str = 'SIP/2.0 180 Ring\r\n\r\n'
         ok_str = 'SIP/2.0 200 OK\r\n'
