@@ -37,20 +37,15 @@ class Proxy_XmlHandler(ContentHandler):
 """ Clase manejadora del registrar """
 class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
-    unauto_str = 'SIP/2.0 401 Unauthorized' + '\r\n' + \
-                     'WW Authenticate: Digest nonce= '
-    
-    nonce = '898989898798989898989\r\n\r\n'
-    trying_str = 'SIP/2.0 100 Trying\r\n\r\n'
-    ring_str = 'SIP/2.0 180 Ring\r\n\r\n'
-    ok_str = 'SIP/2.0 200 OK\r\n'
+
+    nonce = '898989898798989898989"\r\n\r\n'
     bad_str = 'SIP/2.0 400 Bad Request\r\n\r\n'
     client_list = []
     hora = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(time.time()))
     resend_address = []
     resend_port = []
 
-    # Manejador que administra las peticiones Register
+    # Manejador que administra las peticiones SIP
     def handle(self):
 
         self.json2registered()
@@ -67,32 +62,63 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
         # Petición REGISTER
         if REQUEST == 'REGISTER':
 
-            exp_time = int(chops[4])
-            
-            client = [chops[1][4:-5],
-                      {"address": self.client_address[0],
-                       "port": chops[1][-4:],
-                       "exp_time": str(self.hora) + ' + ' + str(exp_time)}]
+            # Con el cliente sin autorizar
+            if len(chops) < 6:
 
-            
-            if exp_time == 0:
-                for cli in self.client_list:
-                    if cli[0] == chops[1][4:-5]:
-                        self.client_list.remove(cli)
+                auto = 'SIP/2.0 401 Unauthorized\r\n' + \
+                       'WWW Authenticate: Digest nonce="' + self.nonce
+                print("Sending... " + '\r\n' + auto)
+                self.wfile.write(bytes(auto, 'utf-8'))
 
-            if exp_time > 0:
-                for cli in self.client_list:
-                    if cli[0] == chops[1][4:-5]:
-                        self.client_list.remove(cli)
-                self.client_list.append(client)
-                print('Client successfully registered\r\n')
 
-            self.register2json()
+            # Autenticación del cliente
+            elif len(chops) >= 6:
+
+                user = chops[1].split(':')[1]
+                passwords = open(passwd_file, 'r')
+                
+                for lines in passwords.readlines():
+                
+                    # Se comprueba la contraseña
+                    if user == lines.split(':')[0]:
+                    
+                        password = lines.split(':')[1]
+
+                        authenticate = hashlib.sha1()
+                        authenticate.update(bytes(password, 'utf-8'))
+                        authenticate.update(bytes(self.nonce, 'utf-8'))
+                        authenticate = authenticate.hexdigest()
+
+                        # Cliente autorizado
+                        exp_time = int(chops[4])
+                        
+                        client = [user,
+                                  {"address": self.client_address[0],
+                                   "port": chops[1].split(':')[2],
+                                   "exp_time": str(self.hora) + ' + ' + \
+                                    str(exp_time)}]
+
+                        if exp_time == 0:
+                            for cli in self.client_list:
+                                if cli[0] == user:
+                                    self.client_list.remove(cli)
+
+                        if exp_time > 0:
+                            for cli in self.client_list:
+                                if cli[0] == user:
+                                    self.client_list.remove(cli)
+                            self.client_list.append(client)
+                            print('Client successfully registered\r\n')
+                            ok_str = 'SIP/2.0 200 OK\r\n'
+                            print("Sending... " + '\r\n' + ok_str)
+                            self.wfile.write(bytes(ok_str, 'utf-8'))
+
+                        self.register2json()
 
         # Petición INVITE
         elif REQUEST == 'INVITE':
 
-            destination = chops[1][4:]
+            destination = chops[1][4:] #REVISAR ESTO
             print(chops[1][4:])
             resend = False
 
