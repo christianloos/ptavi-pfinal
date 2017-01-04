@@ -8,6 +8,7 @@ import socketserver
 from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 from uaclient import XmlHandler
+from uaclient import log_reg
 
 
 """ Clase manejadora de SIP y RTP en el servidor """
@@ -39,6 +40,11 @@ class SIP_ServerHandler(socketserver.DatagramRequestHandler):
             self.dest_port.append(chops[11])
             print("Received: " + data)
             
+            log_info = 'Received from ' + proxy_ip + ':' + \
+                        str(proxy_port) + ': ' + \
+                        data.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
+            
             # Respuesta al cliente
             header = 'Content-Type: application/sdp\r\n\r\n'
             v = 'v=0\r\n'
@@ -50,29 +56,59 @@ class SIP_ServerHandler(socketserver.DatagramRequestHandler):
             sent_line = trying_str + ring_str + ok_str + header + body
             self.wfile.write(bytes(sent_line, 'utf-8') + b'\r\n')
             print("Sending..." + '\r\n' + sent_line)
+            
+            log_info = 'Sent to ' + proxy_ip + ':' + str(proxy_port) + \
+                       ': ' + sent_line.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
 
         # Petición ACK/ Envío RTP
         elif REQUEST == 'ACK':
 
            # Envío RTP
             print("Received: " + data)
+            
+            log_info = 'Received from ' + proxy_ip + ':' + \
+                        str(proxy_port) + ': ' + \
+                        data.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
+            
             aEjecutar = 'mp32rtp -i ' + server_ip + ' -p ' + \
             str(rtp_port) + ' < ' + str(audio)
             print("Executing... ", aEjecutar)
             os.system(aEjecutar)
             print("Successfully sent")
+            
+            log_info = 'Sent to ' + server_ip + ':' + str(rtp_port) + \
+                       ': ' + 'RTP MEDIA'
+            log_reg(config_info, log_info)
 
         elif REQUEST == 'BYE':
 
             print("Received: " + data)
+            
+            log_info = 'Received from ' + proxy_ip + ':' + \
+                        str(proxy_port) + ': ' + \
+                        data.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
+            
             self.wfile.write(bytes(ok_str, 'utf-8') + b'\r\n')
             print("Sending..." + '\r\n' + ok_str)
+            
+            log_info = 'Sent to ' + proxy_ip + ':' + str(proxy_port) + \
+                       ': ' + ok_str.replace('\r\n', ' ')
+            log_reg(config_info, log_info)
 
         elif REQUEST not in ['INVITE', 'ACK', 'BYE']:
             self.wfile.write(b"SIP/2.0 405 Method Not Allowed\r\n\r\n")
+            
+            log_info = 'Error: SIP/2.0 405 Method Not Allowed.'
+            log_reg(config_info, log_info)
 
         else:
             self.wfile.write(b"SIP/2.0 400 Bad Request\r\n\r\n")
+            
+            log_info = 'Error: SIP/2.0 400 Bad Request.'
+            log_reg(config_info, log_info)
             
         
 
@@ -98,7 +134,10 @@ if __name__ == "__main__":
     user_address = config_info[0]['account']['username']
     server_ip = config_info[1]['uaserver']['ip']
     server_port = int(config_info[1]['uaserver']['puerto'])
+    proxy_ip = config_info[3]['regproxy']['ip']
+    proxy_port = int(config_info[3]['regproxy']['puerto'])
     rtp_port = int(config_info[2]['rtpaudio']['puerto'])
+    log = config_info[4]['log']['path']
     audio = config_info[5]['audio']['path']
 
     # Creación del socket con la IP y puerto al que conectarse
@@ -107,8 +146,13 @@ if __name__ == "__main__":
                                    SIP_ServerHandler)
     print("Listening..." + '\r\n')
     
+    log_info = 'Starting...'
+    #log_reg(config_info, log_info)  POR QUE DA ERROR?
+    
     try:
         serv.serve_forever()
     except KeyboardInterrupt:
         print()
+        log_info = 'Finishing...'
+        #log_reg(config_info, log_info) POR QUE DA ERROR?
         print("Server offline")
