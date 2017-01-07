@@ -10,6 +10,7 @@ import json
 from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 import hashlib
+from uaclient import log_reg
 
 """ Clase manejadora del XML de configuración para el proxy """
 class Proxy_XmlHandler(ContentHandler):
@@ -55,6 +56,12 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
         data = line.decode('utf-8')
         
         print("Received from the client: " + '\r\n' + data)
+        
+        # Apertura del log
+        log_info = 'Received from ' + self.client_address[0] + ':' + \
+                    str(chops[1].split(':')[2]) + ': ' + \
+                    data.replace('\r\n', ' ')
+        log_reg(config_info, log_info)
         
         chops = data.split()
         REQUEST = chops[0]
@@ -118,7 +125,7 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
         # Petición INVITE
         elif REQUEST == 'INVITE':
 
-            destination = chops[1][4:] #REVISAR ESTO
+            destination = chops[1][4:]
             print(chops[1][4:])
             resend = False
 
