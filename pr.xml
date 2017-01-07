@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<config>
-    <server name="K2Proxy" ip="127.0.0.1" puerto="5555" />
-    <database path="registered_users.txt" passwdpath="passwords.txt" />
-    <log path="proxy_log.txt" />
-</config>
