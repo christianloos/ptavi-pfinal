@@ -9,7 +9,7 @@ from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 from uaclient import XmlHandler
 from uaclient import log_reg
-
+import time
 
 """ Clase manejadora de SIP y RTP en el servidor """
 
@@ -27,7 +27,7 @@ class SIP_ServerHandler(socketserver.DatagramRequestHandler):
         chops = data.split()
         REQUEST = chops[0]
         
-        sip_str = ' SIP/2.0\r\n' #OJO CON LOS SALTOS DE LINEA
+        sip_str = ' SIP/2.0\r\n' 
         trying_str = 'SIP/2.0 100 Trying\r\n\r\n'
         ring_str = 'SIP/2.0 180 Ring\r\n\r\n'
         ok_str = 'SIP/2.0 200 OK\r\n'
@@ -40,6 +40,7 @@ class SIP_ServerHandler(socketserver.DatagramRequestHandler):
             self.dest_port.append(chops[11])
             print("Received: " + data)
             
+            # Apertura del log
             log_info = 'Received from ' + proxy_ip + ':' + \
                         str(proxy_port) + ': ' + \
                         data.replace('\r\n', ' ')
@@ -110,7 +111,13 @@ class SIP_ServerHandler(socketserver.DatagramRequestHandler):
             log_info = 'Error: SIP/2.0 400 Bad Request.'
             log_reg(config_info, log_info)
             
-        
+# Función de registro de operaciones en un log
+def log_reg(config_info, info):
+
+    with open(log, 'a') as log_file:
+        hora = time.strftime('%Y%m%d%H%M%S', time.gmtime(time.time()))
+        info = hora + ' ' + info + '\r\n'
+        log_file.write(info)
 
 
 if __name__ == "__main__":
@@ -147,12 +154,12 @@ if __name__ == "__main__":
     print("Listening..." + '\r\n')
     
     log_info = 'Starting...'
-    #log_reg(config_info, log_info)  POR QUE DA ERROR?
+    log_reg(config_info, log_info)
     
     try:
         serv.serve_forever()
     except KeyboardInterrupt:
         print()
         log_info = 'Finishing...'
-        #log_reg(config_info, log_info) POR QUE DA ERROR?
+        log_reg(config_info, log_info)
         print("Server offline")
