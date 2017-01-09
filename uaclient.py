@@ -136,7 +136,7 @@ if __name__ == "__main__":
                 
                 log_info = 'Received from ' + proxy_ip + ':' + \
                             str(proxy_port) + ': ' + \
-                            autho_line.replace('\r\n', ' ')
+                            data.decode('utf-8').replace('\r\n', ' ')
                 log_reg(config_info, log_info)
 
         # Petición INVITE
