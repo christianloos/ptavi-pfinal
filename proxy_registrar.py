@@ -10,7 +10,6 @@ import json
 from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 import hashlib
-from uaclient import log_reg
 
 """ Clase manejadora del XML de configuración para el proxy """
 class Proxy_XmlHandler(ContentHandler):
@@ -35,6 +34,14 @@ class Proxy_XmlHandler(ContentHandler):
     def get_tags(self):
         return self.data_xml
 
+# Función de registro de operaciones en un log
+def log_reg(config_info, info):
+
+    with open(log, 'a') as log_file:
+        hora = time.strftime('%Y%m%d%H%M%S', time.gmtime(time.time()))
+        info = hora + ' ' + info + '\r\n'
+        log_file.write(info)
+
 """ Clase manejadora del registrar """
 class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
@@ -54,16 +61,10 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
         # Leyendo línea a línea lo que manda el cliente
         line = self.rfile.read()
         data = line.decode('utf-8')
+        chops = data.split()
         
         print("Received from the client: " + '\r\n' + data)
         
-        # Apertura del log
-        log_info = 'Received from ' + self.client_address[0] + ':' + \
-                    str(chops[1].split(':')[2]) + ': ' + \
-                    data.replace('\r\n', ' ')
-        log_reg(config_info, log_info)
-        
-        chops = data.split()
         REQUEST = chops[0]
 
         # Petición REGISTER
@@ -71,15 +72,30 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
             # Con el cliente sin autorizar
             if len(chops) < 6:
+                
+                # Apertura del log
+                log_info = 'Received from ' + self.client_address[0] + ':' + \
+                            str(chops[1].split(':')[2]) + ': ' + \
+                            data.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
 
                 auto = 'SIP/2.0 401 Unauthorized\r\n' + \
                        'WWW Authenticate: Digest nonce="' + self.nonce
                 print("Sending... " + '\r\n' + auto)
                 self.wfile.write(bytes(auto, 'utf-8'))
 
+                log_info = 'Sent to ' + self.client_address[0] + ':' + \
+                            str(chops[1].split(':')[2]) + \
+                            ': ' + auto.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
 
             # Autenticación del cliente
             elif len(chops) >= 6:
+            
+                log_info = 'Received from ' + self.client_address[0] + ':' + \
+                            str(chops[1].split(':')[2]) + ': ' + \
+                            data.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
 
                 user = chops[1].split(':')[1]
                 passwords = open(passwd_file, 'r')
@@ -119,6 +135,11 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                             ok_str = 'SIP/2.0 200 OK\r\n'
                             print("Sending... " + '\r\n' + ok_str)
                             self.wfile.write(bytes(ok_str, 'utf-8'))
+                            
+                            log_info = 'Sent to ' + self.client_address[0] + \
+                                       ':' + str(chops[1].split(':')[2]) + \
+                                       ': ' + ok_str.replace('\r\n', ' ')
+                            log_reg(config_info, log_info)
 
                         self.register2json()
 
@@ -126,11 +147,15 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
         elif REQUEST == 'INVITE':
 
             destination = chops[1][4:]
-            print(chops[1][4:])
             resend = False
 
             for cli in self.client_list:
                 if cli[0] == destination:
+                    log_info = 'Received from ' + cli[1]["address"] + \
+                               ':' + str(cli[1]["port"]) + ': ' + \
+                                data.replace('\r\n', ' ')
+                    log_reg(config_info, log_info)
+                
                     resend = True
                     with socket.socket(socket.AF_INET,
                                        socket.SOCK_DGRAM) as my_socket:
@@ -142,42 +167,83 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                         print()
                         print("Resending: (" + cli[1]["address"] + "," + \
                               cli[1]["port"] + ")\r\n" + data)
+                              
+                        log_info = 'Resending to ' + cli[1]["address"] + \
+                                   ':' + str(cli[1]["port"]) + \
+                                   ': ' + data.replace('\r\n', ' ')
+                        log_reg(config_info, log_info)
 
                         response = my_socket.recv(1024).decode('utf-8')
                         print('Received from the server', response)
-                        
                         self.wfile.write(bytes(response, 'utf-8'))
+                        
+                        log_info = 'Received from ' + cli[1]["address"] + \
+                                   ':' + str(cli[1]["port"]) + ': ' + \
+                                    response.replace('\r\n', ' ')
+                        log_reg(config_info, log_info)
+                        
 
             if not resend:
-                self.wfile.write(b"SIP/2.0 404 User Not Found\r\n\r\n")
+                not_found = "SIP/2.0 404 User Not Found\r\n\r\n"
+                self.wfile.write(bytes(not_found, 'utf-8'))
+                print('Sending...', not_found)
+                
+                log_info = 'Sent to ' + cli[1]["address"] + \
+                           ':' + str(cli[1]["port"]) + \
+                           ': ' + 'Error: ' + not_found.replace('\r\n', ' ')
+                log_reg(config_info, log_info)
+                
 
         # Petición ACK
         elif REQUEST == 'ACK':
         
-            with socket.socket(socket.AF_INET,
-                               socket.SOCK_DGRAM) as my_socket:
-                my_socket.connect((self.resend_address[0], 
-                                   self.resend_port[0]))
-                my_socket.send(bytes(data, 'utf-8'))
-                print("Resending: (" + self.resend_address[0] + "," + \
-                      str(self.resend_port[0]) + ")\r\n" + data)
-
+            destination = chops[1][4:]
+            
+            for cli in self.client_list:
+                if cli[0] == destination:
+        
+                    with socket.socket(socket.AF_INET,
+                                       socket.SOCK_DGRAM) as my_socket:
+                        my_socket.connect((self.resend_address[0], 
+                                           self.resend_port[0]))
+                        my_socket.send(bytes(data, 'utf-8'))
+                        print("Resending: (" + self.resend_address[0] + "," + \
+                              str(self.resend_port[0]) + ")\r\n" + data)
+                        
+                        log_info = 'Resending to ' + cli[1]["address"] + \
+                                   ':' + str(cli[1]["port"]) + ': ' + \
+                                    data.replace('\r\n', ' ')
+                        log_reg(config_info, log_info)
 
         elif REQUEST == 'BYE':
         
-            with socket.socket(socket.AF_INET,
-                               socket.SOCK_DGRAM) as my_socket:
-                my_socket.connect((self.resend_address[0], 
-                                   self.resend_port[0]))
-                my_socket.send(bytes(data, 'utf-8'))
-                print("Resending: (" + self.resend_address[0] + "," + \
-                      str(self.resend_port[0]) + ")\r\n" + data)
+            destination = chops[1][4:]
+            
+            for cli in self.client_list:
+                if cli[0] == destination:
+        
+                    with socket.socket(socket.AF_INET,
+                                       socket.SOCK_DGRAM) as my_socket:
+                        my_socket.connect((self.resend_address[0], 
+                                           self.resend_port[0]))
+                        my_socket.send(bytes(data, 'utf-8'))
+                        print("Resending: (" + self.resend_address[0] + "," + \
+                              str(self.resend_port[0]) + ")\r\n" + data)
+                              
+                        log_info = 'Resending to ' + cli[1]["address"] + \
+                                   ':' + str(cli[1]["port"]) + ': ' + \
+                                    data.replace('\r\n', ' ')
+                        log_reg(config_info, log_info)
 
-                response = my_socket.recv(1024).decode('utf-8')
-                print('Received from the server:', response)
-                
-                self.wfile.write(bytes(response, 'utf-8'))
-                
+                        response = my_socket.recv(1024).decode('utf-8')
+                        print('Received from the server:', response)
+                        
+                        self.wfile.write(bytes(response, 'utf-8'))
+                        
+                        log_info = 'Resending to' + cli[1]["address"] + \
+                                   ':' + str(cli[1]["port"]) + ': ' + \
+                                    response.replace('\r\n', ' ')
+                        log_reg(config_info, log_info)
 
 
     def register2json(self):
@@ -217,6 +283,8 @@ if __name__ == "__main__":
     proxy_port = config_info[0]['server']['puerto']
     user_file = config_info[1]['database']['path']
     passwd_file = config_info[1]['database']['passwdpath']
+    log = config_info[2]['log']['path']
+
 
     # Creación del servidor
     serv = socketserver.UDPServer((proxy_ip,
@@ -224,9 +292,13 @@ if __name__ == "__main__":
                                    SIPRegisterHandler)
     print("Server " + proxy_name + " listening at port " + proxy_port +
           "..." + '\r\n')
+    log_info = 'Starting...'
+    log_reg(config_info, log_info)
 
     try:
         serv.serve_forever()
     except KeyboardInterrupt:
         print()
+        log_info = 'Finishing...'
+        log_reg(config_info, log_info)
         print("Server offline")
