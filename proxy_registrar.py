@@ -11,7 +11,12 @@ from xml.sax import make_parser
 from xml.sax.handler import ContentHandler
 import hashlib
 
-""" Clase manejadora del XML de configuración para el proxy """
+
+"""
+Clase manejadora del XML de configuración para el proxy
+"""
+
+
 class Proxy_XmlHandler(ContentHandler):
 
     def __init__(self):
@@ -34,6 +39,7 @@ class Proxy_XmlHandler(ContentHandler):
     def get_tags(self):
         return self.data_xml
 
+
 # Función de registro de operaciones en un log
 def log_reg(config_info, info):
 
@@ -42,9 +48,13 @@ def log_reg(config_info, info):
         info = hora + ' ' + info + '\r\n'
         log_file.write(info)
 
-""" Clase manejadora del registrar """
-class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
+"""
+Clase manejadora del registrar
+"""
+
+
+class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
     nonce = '898989898798989898989"\r\n\r\n'
     bad_str = 'SIP/2.0 400 Bad Request\r\n\r\n'
@@ -57,14 +67,14 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
     def handle(self):
 
         self.json2registered()
-        
+
         # Leyendo línea a línea lo que manda el cliente
         line = self.rfile.read()
         data = line.decode('utf-8')
         chops = data.split()
-        
+
         print("Received from the client: " + '\r\n' + data)
-        
+
         REQUEST = chops[0]
 
         # Petición REGISTER
@@ -72,7 +82,7 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
             # Con el cliente sin autorizar
             if len(chops) < 6:
-                
+
                 # Apertura del log
                 log_info = 'Received from ' + self.client_address[0] + ':' + \
                             str(chops[1].split(':')[2]) + ': ' + \
@@ -85,13 +95,13 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                 self.wfile.write(bytes(auto, 'utf-8'))
 
                 log_info = 'Sent to ' + self.client_address[0] + ':' + \
-                            str(chops[1].split(':')[2]) + \
-                            ': ' + auto.replace('\r\n', ' ')
+                           str(chops[1].split(':')[2]) + \
+                           ': ' + auto.replace('\r\n', ' ')
                 log_reg(config_info, log_info)
 
             # Autenticación del cliente
             elif len(chops) >= 6:
-            
+
                 log_info = 'Received from ' + self.client_address[0] + ':' + \
                             str(chops[1].split(':')[2]) + ': ' + \
                             data.replace('\r\n', ' ')
@@ -99,12 +109,12 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
                 user = chops[1].split(':')[1]
                 passwords = open(passwd_file, 'r')
-                
+
                 for lines in passwords.readlines():
-                
+
                     # Se comprueba la contraseña
                     if user == lines.split(':')[0]:
-                    
+
                         password = lines.split(':')[1]
 
                         authenticate = hashlib.sha1()
@@ -114,12 +124,12 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
 
                         # Cliente autorizado
                         exp_time = int(chops[4])
-                        
+
                         client = [user,
                                   {"address": self.client_address[0],
                                    "port": chops[1].split(':')[2],
-                                   "exp_time": str(self.hora) + ' + ' + \
-                                    str(exp_time)}]
+                                   "exp_time": str(self.hora) + ' + ' +
+                                   str(exp_time)}]
 
                         if exp_time == 0:
                             for cli in self.client_list:
@@ -135,7 +145,7 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                             ok_str = 'SIP/2.0 200 OK\r\n'
                             print("Sending... " + '\r\n' + ok_str)
                             self.wfile.write(bytes(ok_str, 'utf-8'))
-                            
+
                             log_info = 'Sent to ' + self.client_address[0] + \
                                        ':' + str(chops[1].split(':')[2]) + \
                                        ': ' + ok_str.replace('\r\n', ' ')
@@ -155,7 +165,7 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                                ':' + str(cli[1]["port"]) + ': ' + \
                                 data.replace('\r\n', ' ')
                     log_reg(config_info, log_info)
-                
+
                     resend = True
                     with socket.socket(socket.AF_INET,
                                        socket.SOCK_DGRAM) as my_socket:
@@ -165,9 +175,9 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                         self.resend_port.append(int(cli[1]["port"]))
                         my_socket.send(bytes(data, 'utf-8'))
                         print()
-                        print("Resending: (" + cli[1]["address"] + "," + \
+                        print("Resending: (" + cli[1]["address"] + "," +
                               cli[1]["port"] + ")\r\n" + data)
-                              
+
                         log_info = 'Resending to ' + cli[1]["address"] + \
                                    ':' + str(cli[1]["port"]) + \
                                    ': ' + data.replace('\r\n', ' ')
@@ -176,86 +186,84 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                         response = my_socket.recv(1024).decode('utf-8')
                         print('Received from the server', response)
                         self.wfile.write(bytes(response, 'utf-8'))
-                        
+
                         log_info = 'Received from ' + cli[1]["address"] + \
                                    ':' + str(cli[1]["port"]) + ': ' + \
-                                    response.replace('\r\n', ' ')
+                                   response.replace('\r\n', ' ')
                         log_reg(config_info, log_info)
-                        
+
                         resend_address = []
                         resend_port = []
-                        
 
             if not resend:
                 not_found = "SIP/2.0 404 User Not Found\r\n\r\n"
                 self.wfile.write(bytes(not_found, 'utf-8'))
                 print('Sending...', not_found)
-                
+
                 log_info = 'Sent to ' + cli[1]["address"] + \
                            ':' + str(cli[1]["port"]) + \
                            ': ' + 'Error: ' + not_found.replace('\r\n', ' ')
                 log_reg(config_info, log_info)
-                
+
                 resend_address = []
                 resend_port = []
 
         # Petición ACK
         elif REQUEST == 'ACK':
-        
+
             destination = chops[1][4:]
-            
+
             for cli in self.client_list:
                 if cli[0] != destination:
-        
+
                     with socket.socket(socket.AF_INET,
                                        socket.SOCK_DGRAM) as my_socket:
                         my_socket.connect((cli[1]["address"],
                                            int(cli[1]["port"])))
                         my_socket.send(bytes(data, 'utf-8'))
-                        print("Resending: (" + self.resend_address[0] + "," + \
+                        print("Resending: (" + self.resend_address[0] + "," +
                               str(self.resend_port[0]) + ")\r\n" + data)
-                        
+
                         log_info = 'Resending to ' + cli[1]["address"] + \
                                    ':' + str(cli[1]["port"]) + ': ' + \
-                                    data.replace('\r\n', ' ')
+                                   data.replace('\r\n', ' ')
                         log_reg(config_info, log_info)
-                        
+
                         resend_address = []
                         resend_port = []
 
         elif REQUEST == 'BYE':
-        
+
             destination = chops[1][4:]
-            
+
             for cli in self.client_list:
                 if cli[0] != destination:
-        
+
                     with socket.socket(socket.AF_INET,
                                        socket.SOCK_DGRAM) as my_socket:
                         my_socket.connect((cli[1]["address"],
                                            int(cli[1]["port"])))
                         my_socket.send(bytes(data, 'utf-8'))
-                        print("Resending: (" + self.resend_address[0] + "," + \
+                        print("Resending: (" + self.resend_address[0] + "," +
                               str(self.resend_port[0]) + ")\r\n" + data)
-                              
+
                         log_info = 'Resending to ' + cli[1]["address"] + \
                                    ':' + str(cli[1]["port"]) + ': ' + \
-                                    data.replace('\r\n', ' ')
+                                   data.replace('\r\n', ' ')
                         log_reg(config_info, log_info)
 
                         response = my_socket.recv(1024).decode('utf-8')
                         print('Received from the server:', response)
-                        
+
                         self.wfile.write(bytes(response, 'utf-8'))
-                        
+
                         log_info = 'Resending to' + cli[1]["address"] + \
                                    ':' + str(cli[1]["port"]) + ': ' + \
-                                    response.replace('\r\n', ' ')
+                                   response.replace('\r\n', ' ')
                         log_reg(config_info, log_info)
-                        
+
                         resend_address = []
                         resend_port = []
-
 
     def register2json(self):
 
@@ -287,7 +295,6 @@ if __name__ == "__main__":
 
     print()
 
-
     # Declaración de variables usadas al extraer los datos del XML
     proxy_name = config_info[0]['server']['name']
     proxy_ip = config_info[0]['server']['ip']
@@ -296,11 +303,10 @@ if __name__ == "__main__":
     passwd_file = config_info[1]['database']['passwdpath']
     log = config_info[2]['log']['path']
 
-
     # Creación del servidor
     serv = socketserver.UDPServer((proxy_ip,
                                    int(proxy_port)),
-                                   SIPRegisterHandler)
+                                  SIPRegisterHandler)
     print("Server " + proxy_name + " listening at port " + proxy_port +
           "..." + '\r\n')
     log_info = 'Starting...'
