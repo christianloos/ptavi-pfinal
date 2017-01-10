@@ -182,6 +182,9 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                                     response.replace('\r\n', ' ')
                         log_reg(config_info, log_info)
                         
+                        resend_address = []
+                        resend_port = []
+                        
 
             if not resend:
                 not_found = "SIP/2.0 404 User Not Found\r\n\r\n"
@@ -193,6 +196,8 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                            ': ' + 'Error: ' + not_found.replace('\r\n', ' ')
                 log_reg(config_info, log_info)
                 
+                resend_address = []
+                resend_port = []
 
         # Petición ACK
         elif REQUEST == 'ACK':
@@ -200,12 +205,12 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
             destination = chops[1][4:]
             
             for cli in self.client_list:
-                if cli[0] == destination:
+                if cli[0] != destination:
         
                     with socket.socket(socket.AF_INET,
                                        socket.SOCK_DGRAM) as my_socket:
-                        my_socket.connect((self.resend_address[0], 
-                                           self.resend_port[0]))
+                        my_socket.connect((cli[1]["address"],
+                                           int(cli[1]["port"])))
                         my_socket.send(bytes(data, 'utf-8'))
                         print("Resending: (" + self.resend_address[0] + "," + \
                               str(self.resend_port[0]) + ")\r\n" + data)
@@ -214,18 +219,21 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                                    ':' + str(cli[1]["port"]) + ': ' + \
                                     data.replace('\r\n', ' ')
                         log_reg(config_info, log_info)
+                        
+                        resend_address = []
+                        resend_port = []
 
         elif REQUEST == 'BYE':
         
             destination = chops[1][4:]
             
             for cli in self.client_list:
-                if cli[0] == destination:
+                if cli[0] != destination:
         
                     with socket.socket(socket.AF_INET,
                                        socket.SOCK_DGRAM) as my_socket:
-                        my_socket.connect((self.resend_address[0], 
-                                           self.resend_port[0]))
+                        my_socket.connect((cli[1]["address"],
+                                           int(cli[1]["port"])))
                         my_socket.send(bytes(data, 'utf-8'))
                         print("Resending: (" + self.resend_address[0] + "," + \
                               str(self.resend_port[0]) + ")\r\n" + data)
@@ -244,6 +252,9 @@ class SIPRegisterHandler(socketserver.DatagramRequestHandler):
                                    ':' + str(cli[1]["port"]) + ': ' + \
                                     response.replace('\r\n', ' ')
                         log_reg(config_info, log_info)
+                        
+                        resend_address = []
+                        resend_port = []
 
 
     def register2json(self):
